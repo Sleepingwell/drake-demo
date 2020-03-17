@@ -1,0 +1,104 @@
+---
+title: "Simple Drake Example"
+author: "Simon Knapp"
+date: "17 March 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The Interesting Code
+
+```{r plan, collapse=TRUE}
+#----------------------------------------------------------
+# intersting functions
+#----------------------------------------------------------
+average.treatment.effect <- function(y, t, p) {
+  t <- as.numeric(as.character(t))
+  den <- sum(t/p + (1-t)/(1-p))
+  sum(t*y/p - (1-t)*y/(1-p)) / den
+}
+
+#----------------------------------------------------------
+# drake plan
+#----------------------------------------------------------
+library(drake)
+
+plan <- drake_plan(
+  all.data = read.csv(file_in('test.csv')),
+  
+  ps.model = glm(
+    treatment ~ age,
+    data=all.data,
+    family=binomial),
+  
+  ps = predict(ps.model, type='response'),
+  t.inds = with(all.data, as.numeric(as.character(treatment))),
+  ips = with(all.data, t.inds/ps + (1-t.inds)/(1-ps)),
+  
+  all.in.mod.with.ps = lm(
+    y ~ treatment,
+    data=all.data,
+    weights=ips),
+  
+  all.in.mod.with.no.ps = lm(
+    y ~ treatment,
+    data=all.data),
+  
+  all.in.mod.with.age = lm(
+    y ~ treatment + age,
+    data=all.data),
+  
+  ce = coef(all.in.mod.with.ps)['treatment'],
+  ce.biased = coef(all.in.mod.with.no.ps)['treatment'],
+  
+  ce.age = coef(all.in.mod.with.age)['treatment'],
+  
+  ate = average.treatment.effect(all.data$y, all.data$treatment, ps),
+  ate.biased = average.treatment.effect(all.data$y, all.data$treatment, 0.5)
+)
+
+#----------------------------------------------------------
+# make the plan
+#----------------------------------------------------------
+make(plan)
+```
+
+```{r utils, echo = FALSE}
+#----------------------------------------------------------
+# utilities
+#----------------------------------------------------------
+fmt <- function(x) sprintf(x, fmt='%0.2f')
+```
+
+## The plan as a DAG
+
+```{r dag}
+config <- drake_config(plan)
+vis_drake_graph(config)
+```
+
+
+## Some Estimators (using the results)
+
+Note that the true ATE/causal effect is zero.
+
+
+### Design Based Causal Effects
+
+- Including Ps, the (ubiased) ATE is `r fmt(readd(ate))`
+
+- Ignoring PS, the (biased) ATE is `r fmt(readd(ate.biased))`.
+  
+### Model Based Causal Effects
+
+- The (unbiased) causal effect using a weighted least squares estimate in the
+  incorrect regression model is `r fmt(readd(ce))`.
+  
+- The (biased) causal effect using a non-weighted least squares
+  estimate in the incorrect regression model is `r fmt(readd(ce.biased))`.
+  
+- The (unbiased) causal effect using a non-weighted least squares and the
+  correct regression model is `r fmt(readd(ce.age))`.

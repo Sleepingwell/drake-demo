@@ -1,0 +1,7 @@
+test.csv
+drake-demo-report.html
+.Rhistory
+*.swp
+.Rproj.user/
+.drake/
+.Rproj.user
